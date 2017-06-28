@@ -12,6 +12,9 @@ def compare_shapes(shape1, shape2):
     Returns:
         True if they are the same, false if not
     """
+    
+    if shape1 == None or shape2 == None:
+        return True
 
     return all([ a == b or a == None or b == None for a,b in zip(shape1,
                                                                  shape2)])

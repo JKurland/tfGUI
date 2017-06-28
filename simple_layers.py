@@ -15,7 +15,7 @@ def use_variable(scope_name, var_name, shape):
         return v
         
 
-class LinLayer(LayerBase):
+class Linear(LayerBase):
     """
     class for linear projections
     """
@@ -36,6 +36,24 @@ class LinLayer(LayerBase):
         self._variables.append(b)
         with tf.variable_scope(self.name):
             return tf.matmul(inputs, w) + b
+
+
+class Relu(LayerBase):
+    """
+    class for rectified linear units
+    """
+
+    def __init__(self, name):
+        LayerBase.__init__(self, name, None, allow_multiple_inputs = True)
+
+
+    def proc(self, inputs):
+
+        with tf.variable_scope(self.name):
+            return tf.nn.relu(inputs, 'relu')
+
+    
+    
 
 
 
