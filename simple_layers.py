@@ -20,7 +20,7 @@ class Linear(LayerBase):
     class for linear projections
     """
 
-    def __init__(self, size, name):
+    def __init__(self, name, size):
         LayerBase.__init__(self, name, [None,None], allow_multiple_inputs =
                            True)
         self._size = size
@@ -29,8 +29,8 @@ class Linear(LayerBase):
     def proc(self, inputs):
         in_size = inputs.get_shape().as_list()[-1]
 
-        w = use_variable(self.name, 'weights', [in_size, self.size])
-        b = use_variable(self.name, 'biases', [self.size])
+        w = use_variable(self.name, 'weights', [in_size, self._size])
+        b = use_variable(self.name, 'biases', [self._size])
 
         self._variables.append(w)
         self._variables.append(b)
@@ -52,7 +52,23 @@ class Relu(LayerBase):
         with tf.variable_scope(self.name):
             return tf.nn.relu(inputs, 'relu')
 
+class Constant(LayerBase):
+    """layer which outputs a constant numpy array"""
+
+    def __init__(self, name, value):
+        LayerBase.__init__(self, name, [-1]) #required shape of [-1] means no
+        #input can be accepted
+        self.real = True
+        self.output = tf.convert_to_tensor(value, tf.float32)
     
+    def reset_real(self):
+        self.real = True
+
+#because self.real is set to true proc and pre_proc will never be called
+
+
+
+
     
 
 

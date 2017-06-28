@@ -77,18 +77,21 @@ class LayerBase():
                              'but %i inputs given'%len(self._inputs))
     
     
-        shapes = [i.get_shape().as_list() for i in inputs]
-        l = len(self._input_shape)
+        shapes = [i.get_shape().as_list() for i in inputs] 
+        if self._input_shape == None:
+            l = len(inputs[0].get_shape().as_list())
+        else:
+            l = len(self._input_shape)
+
         #all the inputs must have the same number of dimensions as input shape
         if not all([len(shape) == l for shape in shapes]):
-            raise ValueError('all inputs must have the same number of' +
-                             'dimensions, error in' + self.name)
-    
-         
+            raise ValueError('all inputs must have the same number of ' +
+                             'dimensions, error in ' + self.name)
+
         if not all([compare_shapes(self._input_shape, shape) for shape in
                     shapes]):
-            raise ValueError('all input shapes must match the required input' +
-                             'shape, error in' + self.name)
+            raise ValueError('all input shapes must match the required input ' +
+                             ' shape, error in ' + self.name)
     
         
     
@@ -139,8 +142,7 @@ class LayerBase():
 
         if not self.real:
             self._making_real = True
-            inputs = [i.output for i in self._inputs]
-        
+                  
             for i in self._inputs:
                 i.make_real() #recursively make everything real, the base of
                 #the recursion tree will be at layers with not inputs, these
@@ -148,8 +150,8 @@ class LayerBase():
 
             if not all([i.real for i in self._inputs]):
                 raise Exception('Not all inputs have real outputs')
-
-
+            
+            inputs = [i.output for i in self._inputs]
             self.check_inputs(inputs) #will raise errors if there is a problem
 
             self._inter = self.pre_proc(inputs)
@@ -172,7 +174,7 @@ class LayerBase():
         if not isinstance(new_input, LayerBase):
             raise ValueError('new_input must be another layer')
 
-        self._inputs.append(new_inputs)
+        self._inputs.append(new_input)
 
     def change_name(new_name):
         if self.real:
@@ -180,3 +182,6 @@ class LayerBase():
                             'must be cleared before making changes')
         self.name = new_name
 
+    def reset_real(self):
+        self.real = False
+         
