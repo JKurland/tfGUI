@@ -9,7 +9,7 @@ def use_variable(scope_name, var_name, shape):
             v = tf.get_variable(var_name)
 
         if not compare_shapes(v.get_shape().as_list(), shape):
-            raise Exception('Shared variables have different shapes' +
+            raise Exception('Shared variables have different shapes ' +
                             scope_name + '/' + var_name)
 
         return v
