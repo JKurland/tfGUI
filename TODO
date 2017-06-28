@@ -1,0 +1,20 @@
+deal with loss
+
+add more layer types:
+    dropout
+    conv
+    reshape/flatten
+    pooling
+    recursive?
+    file reader
+
+make gui
+
+test weight sharing
+
+saving and loading diagrams
+saving and loading model parameters
+
+
+
+
