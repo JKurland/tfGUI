@@ -20,8 +20,8 @@ class Linear(LayerBase):
     class for linear projections
     """
 
-    def __init__(self, name, size):
-        LayerBase.__init__(self, name, [None,None], allow_multiple_inputs =
+    def __init__(self, name, canvas, size):
+        LayerBase.__init__(self, name, canvas, [None,None], allow_multiple_inputs =
                            True)
         self._size = size
 
@@ -43,8 +43,8 @@ class Relu(LayerBase):
     class for rectified linear units
     """
 
-    def __init__(self, name):
-        LayerBase.__init__(self, name, None, allow_multiple_inputs = True)
+    def __init__(self, name, canvas):
+        LayerBase.__init__(self, name, canvas, None, allow_multiple_inputs = True)
 
 
     def proc(self, inputs):
@@ -55,8 +55,8 @@ class Relu(LayerBase):
 class Constant(LayerBase):
     """layer which outputs a constant numpy array"""
 
-    def __init__(self, name, value):
-        LayerBase.__init__(self, name, [-1]) #required shape of [-1] means no
+    def __init__(self, name, canvas, value):
+        LayerBase.__init__(self, name, canvas, [-1]) #required shape of [-1] means no
         #input can be accepted
         self.real = True
         self.output = tf.convert_to_tensor(value, tf.float32)

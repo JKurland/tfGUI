@@ -1,16 +1,27 @@
 import tensorflow as tf
 import numpy as np
+import tkinter as tk
 
-from simple_layers import Linear, Constant, Relu
+from simple_layers import Linear, Constant, Relu, DragManager
 
-c = Constant('input', np.random.rand(1,3))
-c2 = Constant('input2', np.random.rand(1,4))
+root = tk.Tk()
 
-lin = Linear('linear', 7)
-lin2 = Linear('linear', 7)
+canvas = tk.Canvas(root, width = 400, height = 400)
 
-relu = Relu('relu')
-relu2 = Relu('relu2')
+drag_manager = DragManager(canvas)
+
+canvas.bind("<Button-1>", drag_manager.on_click)
+canvas.bind("<B1-Motion>", drag_manager.on_move)
+canvas.bind("<ButtonRelease-1>", drag_manager.on_release)   
+
+c = Constant('input',canvas, np.random.rand(1,3))
+c2 = Constant('input2',canvas, np.random.rand(1,4))
+
+lin = Linear('linear',canvas, 7)
+lin2 = Linear('linear2',canvas, 7)
+
+relu = Relu('relu', canvas)
+relu2 = Relu('relu2', canvas)
 
 relu.add_input(lin)
 relu2.add_input(lin2)
@@ -19,15 +30,18 @@ lin.add_input(c)
 lin.add_input(c2)
 
 lin2.add_input(relu)
+lin2.add_input(lin)
 
 relu2.make_real()
+
+canvas.pack(fill = tk.BOTH, expand = tk.YES)
 
 
 sess = tf.Session()
 init = tf.global_variables_initializer()
 sess.run(init)
-a = sess.run(relu.output)
+a = sess.run(relu2.output)
 
 print(a)
 
-
+tk.mainloop()

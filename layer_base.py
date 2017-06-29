@@ -1,4 +1,6 @@
 import tensorflow as tf
+import random
+import string
 
 def compare_shapes(shape1, shape2):
     """
@@ -18,6 +20,72 @@ def compare_shapes(shape1, shape2):
 
     return all([ a == b or a == None or b == None for a,b in zip(shape1,
                                                                  shape2)])
+
+class DragManager():
+    """
+    class for an object which managesthe dragging of objects
+    """
+
+    def __init__(self, canvas):
+        self.widget = None
+        self.canvas = canvas
+        self.mouse_x = None
+        self.mouse_y = None 
+
+    def on_click(self, event):
+        self.widget = self.canvas.find_closest(event.x, event.y, halo = 5)[0]
+        self.mouse_x = event.x
+        self.mouse_y = event.y
+
+    def on_move(self, event):
+        if self.widget:
+            ID = self.canvas.gettags(self.widget)
+            if len(ID) >1 : #an arrow got selected
+                return
+
+            widgets = self.canvas.find_withtag(ID)
+            for w in widgets:
+                self.canvas.move(w, event.x - self.mouse_x,
+                                 event.y - self.mouse_y)
+
+            arrows_to = self.canvas.find_withtag('e' + ID[0])
+            for a in arrows_to:
+                X = self.canvas.coords(a)
+                x0 = X[0]
+                y0 = X[1]
+
+                x1 = X[2]
+                y1 = X[3]
+
+                x1 += event.x - self.mouse_x
+                y1 += event.y - self.mouse_y
+
+                self.canvas.coords(a, x0, y0, x1, y1)
+            
+            arrows_to = self.canvas.find_withtag('s' + ID[0])
+            for a in arrows_to:
+                X = self.canvas.coords(a)
+                x0 = X[0]
+                y0 = X[1]
+
+                x1 = X[2]
+                y1 = X[3]
+
+                x0 += event.x - self.mouse_x
+                y0 += event.y - self.mouse_y
+
+                self.canvas.coords(a, x0, y0, x1, y1)
+ 
+            
+            self.mouse_x = event.x
+            self.mouse_y = event.y
+    
+    def on_release(self, event):
+        self.widget = None
+        self.mouse_x = None
+        self.mouse_y = None
+
+
 
 
 
@@ -39,7 +107,9 @@ class LayerBase():
     implemented)
     """
 
-    def __init__(self, name, input_shape, allow_multiple_inputs = False):
+    def __init__(self, name, canvas, input_shape,
+                 allow_multiple_inputs = False,
+                 require_input = True):
         """
         makes the base layer, making sure the layer is not real and has no
         inputs or variable
@@ -58,7 +128,14 @@ class LayerBase():
         self.output = None
         self.name = name
         self._input_shape = input_shape
-    
+        self._require_input = require_input
+        self._canvas = canvas
+        self.id = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(16))
+        self._shape = canvas.create_rectangle(10,10,120,90, tags = self.id)
+        self._text = canvas.create_text(65, 50, text = self.name,
+                                        tags = self.id)
+        self.arrows = []
+        
     def check_inputs(self, inputs):
         """
         checks if the inputs are compatible
@@ -71,7 +148,11 @@ class LayerBase():
                        or if the inputs have inconsisten dimensions
                        or if the inputs shapes do not match the required shape 
         """
-        
+         
+        if len(self._inputs) == 0 and self._require_input:
+            raise ValueError(self.name + ' requires an input but none are ' +
+                             'given')
+
         if (not self._mult_inputs) and len(self._inputs) > 1:
             raise ValueError('only one input is allowed into ' + self.name + 
                              'but %i inputs given'%len(self._inputs))
@@ -92,7 +173,7 @@ class LayerBase():
                     shapes]):
             raise ValueError('all input shapes must match the required input ' +
                              ' shape, error in ' + self.name)
-    
+         
         
     
     def pre_proc(self, inputs):
@@ -139,10 +220,10 @@ class LayerBase():
         """
         if self._making_real:
             raise Exception ('Recusion Error, check for loops')
-
+        
         if not self.real:
             self._making_real = True
-                  
+
             for i in self._inputs:
                 i.make_real() #recursively make everything real, the base of
                 #the recursion tree will be at layers with not inputs, these
@@ -157,6 +238,7 @@ class LayerBase():
             self._inter = self.pre_proc(inputs)
 
             self.output = self.proc(self._inter)
+             
             self.real = True
             self._making_real = False
 
@@ -173,8 +255,24 @@ class LayerBase():
         """
         if not isinstance(new_input, LayerBase):
             raise ValueError('new_input must be another layer')
-
+        
         self._inputs.append(new_input)
+        
+        X = self._canvas.coords(self._shape)
+        x1 = (X[0]+X[2])/2
+        y1 = X[3]
+        
+        X1 = self._canvas.coords(new_input._shape)
+        x0 = (X1[0]+X1[2])/2
+        y0 = X1[1]
+        
+        id1 = 'e' + self.id
+        id2 = 's' + new_input.id
+        
+        self.arrows.append(self._canvas.create_line(x0,y0,x1,y1,
+                                                    arrow = 'last',
+                                                    tags = (id1, id2)))
+        
 
     def change_name(new_name):
         if self.real:
@@ -184,4 +282,4 @@ class LayerBase():
 
     def reset_real(self):
         self.real = False
-         
+        self._making_real = False 
