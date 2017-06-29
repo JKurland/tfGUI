@@ -134,7 +134,7 @@ class LayerBase():
         self._shape = canvas.create_rectangle(10,10,120,90, tags = self.id)
         self._text = canvas.create_text(65, 50, text = self.name,
                                         tags = self.id)
-        self.arrows = []
+        self.arrows = {}
         
     def check_inputs(self, inputs):
         """
@@ -256,6 +256,9 @@ class LayerBase():
         if not isinstance(new_input, LayerBase):
             raise ValueError('new_input must be another layer')
         
+        if new_input in self._inputs:
+            return 
+
         self._inputs.append(new_input)
         
         X = self._canvas.coords(self._shape)
@@ -267,12 +270,20 @@ class LayerBase():
         y0 = X1[1]
         
         id1 = 'e' + self.id
-        id2 = 's' + new_input.id
-        
-        self.arrows.append(self._canvas.create_line(x0,y0,x1,y1,
+        id2 = 's' + new_input.id 
+
+        self.arrows[new_input] = (self._canvas.create_line(x0,y0,x1,y1,
                                                     arrow = 'last',
                                                     tags = (id1, id2)))
         
+    def remove_input(self, old_input):
+        if old_input not in self._inputs:
+            return 
+
+        self._canvas.delete(self.arrows[old_input])
+        del self.arrows[old_input]
+
+        self._inputs.remove(old_input)
 
     def change_name(new_name):
         if self.real:
