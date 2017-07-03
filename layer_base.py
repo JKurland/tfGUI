@@ -1,6 +1,8 @@
 import tensorflow as tf
+from math import floor
 import random
 import string
+from copy import copy 
 
 def compare_shapes(shape1, shape2):
     """
@@ -15,12 +17,38 @@ def compare_shapes(shape1, shape2):
         True if they are the same, false if not
     """
     
-    if shape1 == None or shape2 == None:
-        return True
-
-    return all([ a == b or a == None or b == None for a,b in zip(shape1,
+    return all([ a == b or a == None or b == None or a == -1 or b == -1 for a,b in zip(shape1,
                                                                  shape2)])
 
+def check_compatible(shapes):
+    """    
+    given a list of shapes check if they are compatible
+    """
+
+    most_specific_shape = shapes[0]
+
+    for shape in shapes:
+        if not compare_shapes(most_specific_shape, shape):
+            return False
+
+        new_mss = []
+        for dim1, dim2 in zip(most_specific_shape, shape):
+            if dim1 == None and dim2:
+                new_mss.append(dim2)
+
+            if dim2 == None and dim1:
+                new_mss.append(dim1)
+
+            if dim2 == None and dim1 == None:
+                new_mss.append(None)
+            
+            if dim1 and dim2:
+                new_mss.append(dim1) #must be the same as the shapes are
+                #compatible
+
+        most_specific_shape = copy(new_mss)
+
+    return True 
 
 class LayerBase():
 
@@ -40,9 +68,12 @@ class LayerBase():
     implemented)
     """
 
-    def __init__(self, name, canvas, input_shape,
-                 allow_multiple_inputs = False,
-                 require_input = True):
+    def __init__(self, name, canvas,
+                  input_number = 1,
+                 input_names = ['main'],
+                 input_shapes = [None],
+                 input_share = [True],
+                 input_require = [True]):
         """
         makes the base layer, making sure the layer is not real and has no
         inputs or variable
@@ -53,25 +84,114 @@ class LayerBase():
             if a dimension may remain unknown it can be set to None. example,
             [3,5] or [None,100]
         """
+        self.input_number = input_number
+        self.input_names = input_names[0:input_number]
+        self.input_shapes = input_shapes[0:input_number]
+        self.input_share = input_share[0:input_number]
+        self.input_require = input_require[0:input_number]
+        if input_number > 0:
+            if len(input_names) != input_number:
+                raise ValueError("number of input names must match" +
+                                     " required number of inputs")
+            if len(input_shapes) != input_number:
+                raise ValueError("number of input shapes must match" +
+                                    " required number of inputs")
+            if len(input_share) != input_number:
+                raise ValueError("number of input shares must match" +
+                                    " required number of inputs")
+            if len(input_require) != input_number:
+                raise ValueError("number of input require must match" +
+                                    " required number of inputs")
+        
+        self._inputs = dict(zip(input_names, input_number*[[]]))
         self._making_real = False
-        self._mult_inputs = allow_multiple_inputs
         self._variables = []
         self.real = False
-        self._inputs = []
+        self._outputs = []
         self.output = None
         self.name = name
-        self._input_shape = input_shape
-        self._require_input = require_input
         self._canvas = canvas
         self.id = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(16))
-        self._shape = canvas.create_rectangle(10,10,120,90, tags = self.id)
-        self._text = canvas.create_text(65, 50, text = self.name,
-                                        tags = self.id)
+
+        self._resetting = False  
+       
         self.arrows = {}
+        self.print_output = False
+        self.log_output = False
         
+        self.x0 = 10
+        self.y0 = 10
+        self.x1 = 120
+        self.y1 = 90
+        
+        self.input_height = 20
+        self.shape, self.text, self.sockets = self._make_shapes()
+
+    @property
+    def x_mean(self):
+        return (self.x0 + self.x1)/2
+
+    @property
+    def y_mean(self):
+        return (self.y1 + self.y0)/2
+
+
+    @property
+    def coords(self):
+        id_search = self._canvas.find_withtag(self.id)
+        body_search = self._canvas.find_withtag('body')
+
+        if len(id_search) > len(body_search):
+            smaller = body_search
+            larger = id_search
+        else:
+            smaller = id_search
+            larger = body_search
+
+        for i in smaller:
+            if i in larger:
+                return self._canvas.coords(i)
+        
+
+    def _make_shapes(self):
+        sockets = {}
+        #alias
+        r = self._canvas.create_rectangle
+        t = self._canvas.create_text 
+        if self.input_number: 
+            #shrink main box
+            self.y1 -= self.input_height
+            
+            #find socket widths
+            i_width = floor((self.x1 - self.x0)/self.input_number)
+            remainder = (self.x1 - self.x0)%self.input_number
+
+            widths = remainder*[i_width+1] + (self.input_number-remainder)*[i_width]
+            
+            #find socket coords
+            x0s = [self.x0 + sum(widths[:i]) for i in range(self.input_number)]
+            x1s = [x0s[i] + widths[i] for i in range(self.input_number)]
+            y0 = self.y1
+            y1 = self.y1 + self.input_height
+
+            #make each socket
+            for i,n in zip(range(self.input_number), self.input_names):
+                socket_box = r(x0s[i], y0, x1s[i], y1,tags = (self.id, 'input', n))
+                socket_text = t((x0s[i]+x1s[i])/2, (y0+y1)/2, text = n, 
+                                tags = (self.id, 'socket_name'))
+                socket = [socket_box, socket_text]
+                sockets[n] = socket
+
+
+        shape = r(self.x0,self.y0,self.x1,self.y1, tags = (self.id, 'body'))
+
+        text = t(self.x_mean, self.y_mean, text = self.name, tags=(self.id, 'name'))
+            
+        return[shape, text, sockets]
+
     def check_inputs(self, inputs):
         """
-        checks if the inputs are compatible
+        checks if the inputs are compatible 
     
         Args:
             inputs: a list of tensors
@@ -81,68 +201,69 @@ class LayerBase():
                        or if the inputs have inconsisten dimensions
                        or if the inputs shapes do not match the required shape 
         """
-         
-        if len(self._inputs) == 0 and self._require_input:
-            raise ValueError(self.name + ' requires an input but none are ' +
-                             'given')
+        for n,share,shape, req in zip(self.input_names, self.input_share, self.input_shapes,
+                                      self.input_require):
+            i = self._inputs[n]
+            
+            nme = self.name + ', ' + n 
+            if (not share) and len(i)>1:
+                raise Exception("More than one input to non-shared socket in "
+                                + nme)
 
-        if (not self._mult_inputs) and len(self._inputs) > 1:
-            raise ValueError('only one input is allowed into ' + self.name + 
-                             'but %i inputs given'%len(self._inputs))
-    
-    
-        shapes = [i.get_shape().as_list() for i in inputs] 
-        if self._input_shape == None:
-            l = len(inputs[0].get_shape().as_list())
-        else:
-            l = len(self._input_shape)
+            if req and len(i) == 0:
+                raise Exception("No input to socket which requires input in " +
+                                nme)
+            if shape:
+                i_shapes = [shape] + [t.output.get_shape().as_list() for t in i]
+            else:
+                d = len(i[0].output.get_shape().as_list())
+                i_shapes = [(d-1)*[None] + [-1]] +  [t.output.get_shape().as_list() for t in i]
+            
+            print(i_shapes)
 
-        #all the inputs must have the same number of dimensions as input shape
-        if not all([len(shape) == l for shape in shapes]):
-            raise ValueError('all inputs must have the same number of ' +
-                             'dimensions, error in ' + self.name)
+            dims = [len(s) for s in i_shapes]
 
-        if not all([compare_shapes(self._input_shape, shape) for shape in
-                    shapes]):
-            raise ValueError('all input shapes must match the required input ' +
-                             ' shape, error in ' + self.name)
-         
+            if not all([d == dims[0] for d in dims]):
+                raise Exception("inconsistent dimensions in " + nme)
+
+            if not check_compatible(i_shapes):
+                raise Exception("incompatible shapes in " + nme)
+            
         
-    
     def pre_proc(self, inputs):
         """
         the pre processing step, this base class is an identity leaving the
         data unchanged but concatenated.
         Args:
-            inputs: a list of compatible tensors
+            inputs: a dictionary of lists of compatible tensors
 
         Returns:
             the input if only a single input is allowed into this layer or the
             inputs concatenated along the final dimension (as this is generally
             the depth) if more than one input is allowed
         """
-        if self._mult_inputs:   
-            with tf.variable_scope(self.name):
-                dim = len(inputs[0].get_shape().as_list())
-                return tf.concat(inputs,dim-1)
-        else:
-            return inputs[0]
-
-                    
-
+    
+        outputs = {}
+        with tf.variable_scope(self.name):
+            for n in self.input_names:
+                dim = len(inputs[n][0].get_shape().as_list())
+                outputs[n] = tf.concat(inputs[n], dim-1)
+        return outputs 
+ 
 
     def proc(self, inputs):
         """
-        takes a single input tensor or a list of tensors and does the main
-        processing for the layer. This base layer is the identity
+         processes a dictionary of tensors, happens after pre_proc
 
         Args:
-            inputs: the input tensor or tensors
+            inputs: dictionary of tensors
 
             returns: the layer output
         """
-        with tf.variable_scope(self.name):
-            return inputs
+        if self.input_number == 1:
+            n = self.input_names[0]
+            with tf.variable_scope(self.name):
+                return inputs[n]
 
     def make_real(self):
         """
@@ -151,36 +272,54 @@ class LayerBase():
         diagram, so raise an exception.
         
         """
-        if self._making_real:
+        if (not self.real) and self._making_real:
             raise Exception ('Recusion Error, check for loops')
         
         if not self.real:
             self._making_real = True
+            
+            for n in self.input_names:
+                for i in self._inputs[n]:
 
-            for i in self._inputs:
-                i.make_real() #recursively make everything real, the base of
+                    if i.make_real() == 0:
+                        #something went wrong
+                        return 0
+                #recursively make everything real, the base of
                 #the recursion tree will be at layers with not inputs, these
                 #will be layers which read files or output a constant
-
-            if not all([i.real for i in self._inputs]):
-                raise Exception('Not all inputs have real outputs')
+            for n in self.input_names:
+                if not all([i.real for i in self._inputs[n]]):
+                    raise Exception('Not all inputs have real outputs')
             
-            inputs = [i.output for i in self._inputs]
-            self.check_inputs(inputs) #will raise errors if there is a problem
+            inputs = {}
+            for n in self.input_names:
+                inputs[n] = [i.output for i in self._inputs[n]]
+            
+            try:
+                self.check_inputs(inputs) #will raise errors if there is a problem
+            except Exception as inst:
+                self.set_real(False)
+                self._making_real = False
+                print(inst)
+                return 0
+
 
             self._inter = self.pre_proc(inputs)
 
             self.output = self.proc(self._inter)
              
-            self.real = True
+            self.set_real(True)
             self._making_real = False
+            return 1
 
-    
+    def run(self, session):
+        return
+
     @property
     def num_inputs(self):
         return len(self._inputs)
 
-    def add_input(self, new_input):
+    def add_input(self, new_input, socket):
         """
         adds a new input to the layer.
         Args:
@@ -189,41 +328,72 @@ class LayerBase():
         if not isinstance(new_input, LayerBase):
             raise ValueError('new_input must be another layer')
         
-        if new_input in self._inputs:
+        if new_input in self._inputs[socket]:
             return 
-
-        self._inputs.append(new_input)
         
-        X = self._canvas.coords(self._shape)
+        self.reset_real()
+        self._inputs[socket].append(new_input)
+        
+        X = self._canvas.coords(self.sockets[socket][0])
         x1 = (X[0]+X[2])/2
         y1 = X[3]
         
-        X1 = self._canvas.coords(new_input._shape)
+        X1 = self._canvas.coords(new_input.shape)
         x0 = (X1[0]+X1[2])/2
         y0 = X1[1]
         
         id1 = 'e' + self.id
         id2 = 's' + new_input.id 
 
-        self.arrows[new_input] = (self._canvas.create_line(x0,y0,x1,y1,
+        self.arrows[(new_input,socket)] = (self._canvas.create_line(x0,y0,x1,y1,
                                                     arrow = 'last',
-                                                    tags = (id1, id2)))
-        
-    def remove_input(self, old_input):
-        if old_input not in self._inputs:
+                                                    tags = (id1, id2,'arrow')))
+        new_input._outputs.append(self)  
+
+    def remove_input(self, old_input, socket):
+        if old_input not in self._inputs[socket]:
             return 
+        
+        self.reset_real()
+        self._canvas.delete(self.arrows[(old_input,socket)])
+        del self.arrows[(old_input,socket)]
 
-        self._canvas.delete(self.arrows[old_input])
-        del self.arrows[old_input]
+        self._inputs[socket].remove(old_input)
+        old_input._outputs.remove(self)
 
-        self._inputs.remove(old_input)
-
-    def change_name(new_name):
+    def change_name(self, new_name):
         if self.real:
             raise Exception('cannot change the name of a real layer, graph' +
                             'must be cleared before making changes')
         self.name = new_name
-
+        self.reset_real()
     def reset_real(self):
-        self.real = False
+        
+        self._resetting = True
+
+        self.set_real(False)
         self._making_real = False 
+        
+        for o in self._outputs:
+            if not o._resetting:
+                o.reset_real()
+        
+        for v in self._inputs.values():
+            for i in v:
+                if not i._resetting:
+                    i.reset_real()
+ 
+        self._resetting = False 
+
+    def set_real(self, r):
+        if r:
+            self._canvas.itemconfig(self.shape, fill = 'green')
+        else:
+            self._canvas.itemconfig(self.shape, fill = '')
+        self.real = r
+        
+
+
+    def show_variable_window(self):
+        X = self.coords
+        
