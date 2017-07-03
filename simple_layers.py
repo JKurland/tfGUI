@@ -33,7 +33,7 @@ class Linear(LayerBase):
         self._variables['size'] = size
     
     def proc(self, inputs):
-        self._size = self._variables['size']
+        self._size = int(self._variables['size'])
         inputs = inputs['main']
         in_size = inputs.get_shape().as_list()[-1]
 
@@ -65,12 +65,12 @@ class Constant(LayerBase):
     """layer which outputs a constant numpy array"""
     
 
-    def __init__(self, name, canvas, value=np.random.rand(5,10)):
+    def __init__(self, name, canvas, value='np.random.rand(5,10)'):
         LayerBase.__init__(self, name, canvas, input_number = 0)
         self.value = value
    
     def proc(self, inputs):
-        return tf.convert_to_tensor(self.value, tf.float32)
+        return tf.convert_to_tensor(eval(self.value), tf.float32)
 
 class Print(LayerBase):
     """layer which prints its input when run"""
@@ -82,6 +82,56 @@ class Print(LayerBase):
         print(session.run(self.output))
 
 
+class MSELoss(LayerBase):
+
+    def __init__(self, name, canvas):
+        LayerBase.__init__(self, name,canvas, input_number = 2,
+                           input_names = ['estimates','targets'],
+                           input_share = [True, True],
+                           input_shapes = [None, None],
+                           input_require = [True, True])
+
+    def proc(self, inputs):
+        targets = inputs['targets']
+        est = inputs['estimates']
+        output = tf.reduce_mean(tf.square(est-targets))
+        return output
+
+class FileReader(LayerBase):
+
+    def __init__(self, name, canvas):
+        LayerBase.__init__(self, name, canvas, input_number = 0)
+
+        self._variables['path'] = 'data'
+
+    def proc(self, inputs):
+        path = self._variables['path']
+        data = np.genfromtxt(path, delimiter = ',')
+        return tf.convert_to_tensor(data,tf.float32)
+
+class Trainer(LayerBase):
+
+    def __init__(self, name, canvas):
+        LayerBase.__init__(self, name, canvas, input_names = ['Loss'])
+        self._variables['iters'] == 10
+        self._train_op = None 
+    
+
+    @property
+    def repeat(self):
+        return int(self._variables['iters'])
+    
+    @repeat.setter
+    def repeat(self, value):
+        self._variables['iters'] = value
+
+    def proc(self, inputs):
+        loss = inputs['Loss']
+        self._train_op = tf.train.AdamOptimizer(1e-4).minimize(loss)
+        return loss
+
+    def run(self, session):
+        session.run(self._train_op)
 
 
 def add_layer(Class, man):
@@ -124,7 +174,10 @@ class DragManager():
         self.shortcut_dict = {'l':Linear,
                               'c':Constant,
                               'r':Relu,
-                              'p':Print}
+                              'p':Print,
+                              'm':MSELoss,
+                              'f':FileReader,
+                              't':Trainer}
         self.tags = None 
     
     def find_close(self, x, y, range = 1):
@@ -243,10 +296,10 @@ class DragManager():
                 return 
             init = tf.global_variables_initializer()
             self.sess.run(init)
-
-        for l in self.layers:
-            if l.real:
-                l.run(self.sess)
+        for _ in range(obj.repeat):
+            for l in self.layers:
+                if l.real:
+                    l.run(self.sess)
 
 
     def on_r_click(self, event):
@@ -256,7 +309,6 @@ class DragManager():
     def on_r_release(self, event):
         other_widget = self.canvas.find_closest(event.x, event.y, halo = 5)[0]
         other_tags = self.canvas.gettags(other_widget) 
-        print(other_tags)
         if 'arrow' in other_tags or 'arrow' in self.tags:
             return #if either object is an arrow return
         
@@ -267,8 +319,6 @@ class DragManager():
         other_obj = self.id2obj[self.canvas.gettags(other_widget)[0]]
         
         socket = other_tags[2]
-        print(obj)
-        print(other_obj)
         
         for k in obj._inputs.keys():
             if other_obj in obj._inputs[k]:
@@ -283,6 +333,10 @@ class DragManager():
         
     def on_key(self, event):
         print(event.char)
+        
+        for l in self.layers:
+            if l.showing_v_win:
+                return
 
         try:
             Class = self.shortcut_dict[event.char]

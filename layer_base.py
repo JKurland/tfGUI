@@ -103,8 +103,8 @@ class LayerBase():
             if len(input_require) != input_number:
                 raise ValueError("number of input require must match" +
                                     " required number of inputs")
-        
-        self._inputs = dict(zip(input_names, input_number*[[]]))
+        empties = [ [] for _ in range(input_number)] 
+        self._inputs = dict(zip(input_names, empties))
         self._making_real = False
         self._variables = {}
         self.real = False
@@ -115,7 +115,9 @@ class LayerBase():
         self.id = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(16))
 
         self._resetting = False  
-       
+        
+        self.repeat = 1
+
         self.arrows = {}
         self.print_output = False
         self.log_output = False
@@ -185,7 +187,7 @@ class LayerBase():
             for i,n in zip(range(self.input_number), self.input_names):
                 socket_box = r(x0s[i], y0, x1s[i], y1,tags = (self.id, 'input', n))
                 socket_text = t((x0s[i]+x1s[i])/2, (y0+y1)/2, text = n, 
-                                tags = (self.id, 'socket_name'))
+                                tags = (self.id,'input', n,  'socket_name'))
                 socket = [socket_box, socket_text]
                 sockets[n] = socket
 
@@ -224,9 +226,10 @@ class LayerBase():
                 i_shapes = [shape] + [t.output.get_shape().as_list() for t in i]
             else:
                 d = len(i[0].output.get_shape().as_list())
-                i_shapes = [(d-1)*[None] + [-1]] +  [t.output.get_shape().as_list() for t in i]
-            
-            print(i_shapes)
+                if d > 0:
+                    i_shapes = [(d-1)*[None] + [-1]] +  [t.output.get_shape().as_list() for t in i]
+                else:
+                    i_shapes = [t.output.get_shape().as_list() for t in i]
 
             dims = [len(s) for s in i_shapes]
 
@@ -297,11 +300,11 @@ class LayerBase():
             for n in self.input_names:
                 if not all([i.real for i in self._inputs[n]]):
                     raise Exception('Not all inputs have real outputs')
-            
+             
             inputs = {}
             for n in self.input_names:
                 inputs[n] = [i.output for i in self._inputs[n]]
-            
+
             try:
                 self.check_inputs(inputs) #will raise errors if there is a problem
             except Exception as inst:
@@ -341,6 +344,7 @@ class LayerBase():
         self.reset_real()
         self._inputs[socket].append(new_input)
         
+
         X = self._canvas.coords(self.sockets[socket][0])
         x1 = (X[0]+X[2])/2
         y1 = X[3]
@@ -430,7 +434,7 @@ class LayerBase():
 
             def callback(sv):
                 try:
-                    new_val = int(sv.get())     
+                    new_val = sv.get()     
                 except:
                     return
                 if new_val != self._variables[n]:
