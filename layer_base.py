@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tkinter as tk
 from math import floor
 import random
 import string
@@ -69,7 +70,7 @@ class LayerBase():
     """
 
     def __init__(self, name, canvas,
-                  input_number = 1,
+                  input_number =  1,
                  input_names = ['main'],
                  input_shapes = [None],
                  input_share = [True],
@@ -105,7 +106,7 @@ class LayerBase():
         
         self._inputs = dict(zip(input_names, input_number*[[]]))
         self._making_real = False
-        self._variables = []
+        self._variables = {}
         self.real = False
         self._outputs = []
         self.output = None
@@ -118,12 +119,18 @@ class LayerBase():
         self.arrows = {}
         self.print_output = False
         self.log_output = False
-        
+       
+        self._tf_vars = []
+
         self.x0 = 10
         self.y0 = 10
         self.x1 = 120
         self.y1 = 90
+        self._v_win_width = 250
+        self._v_win_height = 40
         
+        self.showing_v_win = False
+
         self.input_height = 20
         self.shape, self.text, self.sockets = self._make_shapes()
 
@@ -392,8 +399,79 @@ class LayerBase():
             self._canvas.itemconfig(self.shape, fill = '')
         self.real = r
         
-
-
     def show_variable_window(self):
-        X = self.coords
+     
+        if len(self._variables) == 0:
+            return
         
+        self.showing_v_win = True
+
+        X = self.coords
+        num = len(self._variables)
+        x0 = X[2]
+        x1 = x0 + self._v_win_width
+        y0 = X[1]
+        y1 = y0 + self._v_win_height*num
+        
+        self._v_win = self._canvas.create_rectangle(x0,y0,x1,y1, tags = self.id)
+        self._v_win_labels = []
+        self._v_win_entries = []
+        vs = self._variables.values()
+        ns = self._variables.keys()
+        pad = 5
+        for v,n,i in zip(vs, ns, range(num)):
+            self._v_win_labels.append(self._canvas.create_text(x0 + pad,
+                                                               y0 + (i+1)*pad,
+                                                               anchor = tk.NW,
+                                                               text = n,
+                                                               tags = self.id))
+
+            sv = tk.StringVar()
+
+            def callback(sv):
+                try:
+                    new_val = int(sv.get())     
+                except:
+                    return
+                if new_val != self._variables[n]:
+                    self._variables[n] = new_val
+                    self.reset_real()
+
+            sv.trace("w", lambda name, index, mode, sv=sv: callback(sv))
+            e = tk.Entry(self._canvas, textvariable = sv)
+            e.config(state = 'normal')
+            e.insert(0,str(v))
+            w = self._canvas.create_window(x0 + 50, y0 + (i+1)*pad, window = e,
+                                           anchor = tk.NW, tags = self.id)
+            self._v_win_entries.append((e,w)) 
+
+    def hide_variable_window(self):
+        if not self.showing_v_win:
+            return
+    
+
+        self._canvas.delete(self._v_win)
+        self._v_win = None 
+        
+        for s in self._v_win_labels:
+            self._canvas.delete(s)
+        
+        self._v_win_labels = []
+        
+        for s in self._v_win_entries:
+            s[0].config(state = 'disabled')
+            self._canvas.delete(s[1])
+
+        self._v_win_entries = []
+
+        self.showing_v_win = False
+        
+
+
+
+
+
+
+
+
+

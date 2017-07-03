@@ -10,8 +10,11 @@ def use_variable(scope_name, var_name, shape):
         except ValueError:
             scope.reuse_variables()
             v = tf.get_variable(var_name)
-
+        
+        
         if not compare_shapes(v.get_shape().as_list(), shape):
+            print(shape)
+            print(v.get_shape().as_list())
             raise Exception('Shared variables have different shapes ' +
                             scope_name + '/' + var_name)
 
@@ -27,18 +30,18 @@ class Linear(LayerBase):
         LayerBase.__init__(self, name, canvas, input_shapes = [[None, -1]])
         #None forces all inputs to be the same size, -1 allows inputs to be
         #different
-        self._size = size
-
+        self._variables['size'] = size
     
     def proc(self, inputs):
+        self._size = self._variables['size']
         inputs = inputs['main']
         in_size = inputs.get_shape().as_list()[-1]
 
         w = use_variable(self.name, 'weights', [in_size, self._size])
         b = use_variable(self.name, 'biases', [self._size])
 
-        self._variables.append(w)
-        self._variables.append(b)
+        self._tf_vars.append(w)
+        self._tf_vars.append(b)
         with tf.variable_scope(self.name):
             return tf.matmul(inputs, w) + b
 
@@ -123,12 +126,23 @@ class DragManager():
                               'r':Relu,
                               'p':Print}
         self.tags = None 
+    
+    def find_close(self, x, y, range = 1):
+        
+        close = self.canvas.find_overlapping(x-range, y-range, x+range, y+range)
+        if len(close) == 0:
+            return [None]
+        else:
+            return close
+
 
     def on_click(self, event):
-        self.widget = self.canvas.find_closest(event.x, event.y, halo = 5)[0]
+        self.widget = self.canvas.find_closest(event.x, event.y,halo = 5)[0]
         self.mouse_x = event.x
         self.mouse_y = event.y
-
+        
+        self.x = event.x
+        self.y = event.y
 
     def on_move(self, event):
         if self.widget:
@@ -174,9 +188,36 @@ class DragManager():
             self.mouse_y = event.y
     
     def on_release(self, event):
+        
+        widget = self.find_close(event.x, event.y)[0]
+        
+        if widget == None or self.widget == None:
+            for l in self.layers:
+                if l.showing_v_win:
+                    l.hide_variable_window()
+        else:
+            first_tags = self.canvas.gettags(self.widget)
+            tags = self.canvas.gettags(widget) 
+            
+            dist = (self.x - event.x)**2 + (self.y - event.y)**2
+
+            if first_tags[0] == tags[0] and dist < 25: #we clicked on one object
+                            
+                if 'arrow' in tags:
+                    return
+
+                obj = self.id2obj[tags[0]]
+                if not obj.showing_v_win:
+                    obj.show_variable_window()
+                else:
+                    obj.hide_variable_window()
+    
+
         self.widget =  None
         self.mouse_x = None
         self.mouse_y = None
+
+
 
     def on_double(self, event):
         #self.widget is set by the on_click event which is called first
@@ -242,14 +283,13 @@ class DragManager():
         
     def on_key(self, event):
         print(event.char)
+
         try:
             Class = self.shortcut_dict[event.char]
         except:
             return
         add_layer(Class, self)
       
-
-        
 
 
 

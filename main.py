@@ -7,7 +7,7 @@ from simple_layers import Linear, Constant, Relu, DragManager
 root = tk.Tk()
 
 canvas = tk.Canvas(root, width = 400, height = 400)
-
+sess = tf.Session()
 drag_manager = DragManager(canvas)
 
 canvas.bind("<Button-1>", drag_manager.on_click)
@@ -16,7 +16,7 @@ canvas.bind("<ButtonRelease-1>", drag_manager.on_release)
 canvas.bind_all("<Button-3>", drag_manager.on_r_click)
 canvas.bind_all("<ButtonRelease-3>", drag_manager.on_r_release)
 canvas.bind_all("<KeyPress>", drag_manager.on_key)
-
+canvas.bind("<Double-Button-1>", drag_manager.on_double)
 
 #c = Constant('input',canvas, np.random.rand(1,3))
 #c2 = Constant('input2',canvas, np.random.rand(1,4))
