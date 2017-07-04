@@ -3,7 +3,7 @@ import tkinter as tk
 from math import floor
 import random
 import string
-from copy import copy 
+from copy import copy, deepcopy 
 
 def compare_shapes(shape1, shape2):
     """
@@ -50,6 +50,15 @@ def check_compatible(shapes):
         most_specific_shape = copy(new_mss)
 
     return True 
+
+
+class VariableType():
+
+    def __init__(self, type_string, options):
+        self.type = type_string
+        self.options = options
+
+
 
 class LayerBase():
 
@@ -107,6 +116,8 @@ class LayerBase():
         self._inputs = dict(zip(input_names, empties))
         self._making_real = False
         self._variables = {}
+        self._variable_types = {}
+
         self.real = False
         self._outputs = []
         self.output = None
@@ -135,7 +146,7 @@ class LayerBase():
 
         self.input_height = 20
         self.shape, self.text, self.sockets = self._make_shapes()
-
+            
     @property
     def x_mean(self):
         return (self.x0 + self.x1)/2
@@ -255,10 +266,9 @@ class LayerBase():
         """
     
         outputs = {}
-        with tf.variable_scope(self.name):
-            for n in self.input_names:
-                dim = len(inputs[n][0].get_shape().as_list())
-                outputs[n] = tf.concat(inputs[n], dim-1)
+        for n in self.input_names:
+            dim = len(inputs[n][0].get_shape().as_list())
+            outputs[n] = tf.concat(inputs[n], dim-1)
         return outputs 
  
 
@@ -273,8 +283,7 @@ class LayerBase():
         """
         if self.input_number == 1:
             n = self.input_names[0]
-            with tf.variable_scope(self.name):
-                return inputs[n]
+            return inputs[n]
 
     def make_real(self):
         """
@@ -314,10 +323,10 @@ class LayerBase():
                 print(inst)
                 return 0
 
+            with tf.variable_scope(self.name):
+                self._inter = self.pre_proc(inputs)
 
-            self._inter = self.pre_proc(inputs)
-
-            self.output = self.proc(self._inter)
+                self.output = self.proc(self._inter)
              
             self.set_real(True)
             self._making_real = False
@@ -394,7 +403,8 @@ class LayerBase():
             for i in v:
                 if not i._resetting:
                     i.reset_real()
- 
+        self._tf_vars = []
+
         self._resetting = False 
 
     def set_real(self, r):
@@ -409,10 +419,9 @@ class LayerBase():
         if len(self._variables) == 0:
             return
         
-        self.showing_v_win = True
-
         X = self.coords
         num = len(self._variables)
+        
         x0 = X[2]
         x1 = x0 + self._v_win_width
         y0 = X[1]
@@ -424,34 +433,48 @@ class LayerBase():
         vs = self._variables.values()
         ns = self._variables.keys()
         pad = 5
+        y_gap = 30
         for v,n,i in zip(vs, ns, range(num)):
+            try:
+                typ = self._variable_types[n]
+            except:
+                typ = VariableType('text', None)
+            
+
             self._v_win_labels.append(self._canvas.create_text(x0 + pad,
-                                                               y0 + (i+1)*pad,
+                                                               y0+i*y_gap+pad,
                                                                anchor = tk.NW,
                                                                text = n,
                                                                tags = self.id))
-
+            
             sv = tk.StringVar()
-
-            def callback(sv):
-                try:
-                    new_val = sv.get()     
-                except:
-                    return
-                if new_val != self._variables[n]:
-                    self._variables[n] = new_val
+            def callback(sv, n):
+                new_val = sv.get()     
+                if new_val != self._variables[copy(n)]:
+                    self._variables[copy(n)] = copy(new_val)
                     self.reset_real()
 
-            sv.trace("w", lambda name, index, mode, sv=sv: callback(sv))
-            e = tk.Entry(self._canvas, textvariable = sv)
-            e.config(state = 'normal')
-            e.insert(0,str(v))
-            w = self._canvas.create_window(x0 + 50, y0 + (i+1)*pad, window = e,
-                                           anchor = tk.NW, tags = self.id)
-            self._v_win_entries.append((e,w)) 
+            sv.trace("w",
+                     lambda name, index, mode, sv=sv, n=n: deepcopy(callback(sv,n)))
+        
+            if typ.type == 'text':
+                e = tk.Entry(self._canvas, textvariable = sv)
+                e.insert(0,str(v))
+                w = self._canvas.create_window(x0 + 50, y0+i*y_gap+pad,
+                                               window = e,
+                                               anchor = tk.NW, tags = self.id)
+                self._v_win_entries.append([e,w,sv]) 
+            
+            elif typ.type == 'drop':
+                e = tk.OptionMenu(self._canvas, sv, *typ.options)
+                w = self._canvas.create_window(x0 + 50, y0 + i*y_gap+pad, window = e,
+                                               anchor = tk.NW, tags = self.id)
+                self._v_win_entries.append([e,w,sv]) 
+
+        self.showing_v_win = True
 
     def hide_variable_window(self):
-        if not self.showing_v_win:
+        if not self.showing_v_win: 
             return
     
 

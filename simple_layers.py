@@ -3,57 +3,54 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 
-def use_variable(scope_name, var_name, shape, init = None):
-    with tf.variable_scope(scope_name) as scope: 
-        try:
-            if init is not None:
-                if isinstance(init, tf.Tensor):
-                    v = tf.get_variable(var_name, initializer = init)
-                else:
-                    v = tf.get_variable(var_name, shape, initializer = init)
-            else:
-                v = tf.get_variable(var_name, shape)
-        except ValueError as inst:
-            scope.reuse_variables()
-            if init is not None:
+def use_variable(var_name, shape, init = None):
+    try:
+        if init is not None:
+            if isinstance(init, tf.Tensor):
                 v = tf.get_variable(var_name, initializer = init)
             else:
-                v = tf.get_variable(var_name)
-        
-        
-        if not compare_shapes(v.get_shape().as_list(), shape):
-            raise Exception('Shared variables have different shapes ' +
-                            scope_name + '/' + var_name +
-                           '. Got shapes {}, {}'.format(shape,
-                                                        v.get_shape().as_list()))
+                v = tf.get_variable(var_name, shape, initializer = init)
+        else:
+            v = tf.get_variable(var_name, shape)
+    except ValueError as inst:
+        scope.reuse_variables()
+        if init is not None:
+            v = tf.get_variable(var_name, initializer = init)
+        else:
+            v = tf.get_variable(var_name)
+    
+    
+    if not compare_shapes(v.get_shape().as_list(), shape):
+        raise Exception('Shared variables have different shapes ' +
+                        scope_name + '/' + var_name +
+                       '. Got shapes {}, {}'.format(shape,
+                                                    v.get_shape().as_list()))
 
-        return v
-        
+    return v
+    
 
 class Linear(LayerBase):
     """
     class for linear projections
     """
 
-    def __init__(self, name, canvas, size=20):
+    def __init__(self, name, canvas):
         LayerBase.__init__(self, name, canvas, input_shapes = [[None, -1]])
         #None forces all inputs to be the same size, -1 allows inputs to be
         #different
-        self._variables['size'] = size
+        self._variables['size'] = 20
     
     def proc(self, inputs):
         self._size = int(self._variables['size'])
         inputs = inputs['main']
         in_size = inputs.get_shape().as_list()[-1]
 
-        w = use_variable(self.name, 'weights', [in_size, self._size])
-        b = use_variable(self.name, 'biases', [self._size])
+        w = use_variable('weights', [in_size, self._size])
+        b = use_variable('biases', [self._size])
 
         self._tf_vars.append(w)
         self._tf_vars.append(b)
-        with tf.variable_scope(self.name):
-            return tf.matmul (inputs, w) + b
-
+        return tf.matmul (inputs, w) + b
 
 class Relu(LayerBase):
     """
@@ -74,11 +71,11 @@ class Constant(LayerBase):
     """layer which outputs a constant numpy array"""
     
 
-    def __init__(self, name, canvas, value='np.random.rand(5,10)'):
+    def __init__(self, name, canvas):
         LayerBase.__init__(self, name, canvas, input_number = 0)
-        self.value = value
+        self.value = 'np.random.rand(5,10)'
 
-        self._variables['value'] = value
+        self._variables['value'] = self.value
    
     def proc(self, inputs):
         val = self._variables['value']
@@ -142,7 +139,8 @@ class Trainer(LayerBase):
 
     def proc(self, inputs):
         loss = inputs['Loss']
-        self._train_op = tf.train.AdamOptimizer(1e-4).minimize(loss)
+        self._train_op = tf.train.AdamOptimizer(1e-4).minimize(loss,
+                                                    aggregation_method = 2)
         return loss
 
     def run(self, session):
@@ -151,7 +149,7 @@ class Trainer(LayerBase):
 
 class Plot(LayerBase):
 
-    def __init__(self, name, canvas):
+    def __init__(self, name, canvas, man):
         LayerBase.__init__(self, name, canvas,
                            input_share = [False],
                            input_shapes = [[]])
@@ -160,18 +158,13 @@ class Plot(LayerBase):
         self.x = []
         self._variables['Frequency'] = 1
         self._variables['Title'] = self.name
-        self._variables['y label'] = ''
+        self._variables['y label'] = 'Value'
         self.t = 0
-        
+        man.figs += 1
         #name is chosen initially so that the first Plot object is called Plot
         #the second is Plot0, the third Plot1 etc... take advantage of that
         #to number the figures, very hacky, should be changed
-        if name == 'Plot':
-            num = 1
-        else:
-            num = int(name[4:])+2
-
-        self.fig_num = num 
+        self.fig_num = man.figs
 
 
     def run(self, session):
@@ -214,7 +207,7 @@ class End(LayerBase):
     def repeat(self, value):
         self._variables['iters'] = value
 
-    def check_compatible(self, inputs):
+    def check_inputs(self, inputs):
         return
 
     def pre_proc(self, inputs):
@@ -237,7 +230,7 @@ class Sample(LayerBase):
         N = eval(self._variables['N'])
 
         shuffle = tf.random_shuffle(i)
-        t = use_variable(self.name, 'step', [], init = tf.constant(0))
+        t = use_variable('step', [], init = tf.constant(0))
 
         if total_size<N:
             N = total_size
@@ -257,12 +250,81 @@ class ExtractParam(LayerBase):
     def __init__(self, name, canvas):
         LayerBase.__init__(self, name, canvas, input_share = [False])
         self._variables['Param Name'] = ''
+        
+        self.show_variable_window()
+        self.hide_variable_window()
 
     def proc(self, inputs):
+        i = self._inputs['main'][0] #the input object
+        if self._variables['Param Name'] == '':
+            return tf.constant(0)
+        else:
+            n = self._variables['Param Name']
+            
+            for var in i._tf_vars:
+                if var.name.split('/')[-1][:-2].lower() == n.lower():
+                    output = var 
+                    return tf.identity(output) 
+            return tf.constant(0)
+
+
+class ShowImage(LayerBase):
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, input_share = [False])
+        man.figs += 1
+        self.fig_num = man.figs
+        self._variables['Title'] = self.name
+        self._variables['vmin'] = ''
+        self._variables['vmax'] = ''
+        self._variables['Frequency'] = 1
+        self.t = 0
+
+    def check_input(self, inputs):
+        LayerBase.check_inputs(self, inputs)
         
-        i = self._inputs['main'] #the input object
-        
-        
+        shape = input['main'][0].get_shape().as_list()
+        dims = len(shape)
+        if dims == 3:
+            if shape[2] != 1 and shape[2]!=3:
+                raise Exception('If input has 3 dimensions the third ' +
+                                'dimension must have length 1 or 3, in ' +
+                                self.name)
+
+            if shape[2] == 3:
+                self.col = 1
+            else:
+                self.col = 0
+        elif dims != 2:
+            self.col = 0
+            raise Exception('Image must have 2 or 3 dimensions in ' +
+                            self.name)
+
+    def run(self, session):
+        if self.t%eval(self._variables['Frequency']) == 0:
+            img = session.run(self.output)
+            plt.figure(self.fig_num)
+            plt.clf
+            if self._variables['vmin'] == '':
+                vmin = img.min()
+            else:
+                vmin = eval(self._variables['vmin'])
+            
+            if self._variables['vmax'] == '':
+                vmax = img.max()
+            else:
+                vmax = eval(self._variables['vmax'])
+
+            plt.imshow(img, vmin = vmin, vmax = vmax)
+            plt.draw()
+            plt.pause(0.01)
+
+        self.t += 1 
+
+    def reset_real(self):
+        LayerBase.reset_real(self)
+        plt.figure(self.fig_num)
+        plt.clf()
+        self.t = 0
 
 def add_layer(Class, man):
     name  = Class.__name__
@@ -275,8 +337,12 @@ def add_layer(Class, man):
 
         name = new_name
         
-        
-    new_layer = Class(name, man.canvas)
+    try: 
+        new_layer = Class(name, man.canvas, man)
+    except TypeError as inst:
+        print(inst)
+        new_layer = Class(name, man.canvas)
+
     man.id2obj[new_layer.id] = new_layer
     man.obj2id[new_layer] = new_layer.id
     man.names.append(new_layer.name)
@@ -299,6 +365,7 @@ class DragManager():
         self.names = []
         self.layers = []
         self.logs = {}
+        self.figs = 0
         self.shortcut_dict = {'l':Linear,
                               'c':Constant,
                               'r':Relu,
@@ -308,7 +375,9 @@ class DragManager():
                               't':Trainer,
                               'o':Plot,
                               'e':End,
-                              's':Sample}
+                              's':Sample,
+                              'x':ExtractParam,
+                              'i':ShowImage}
         self.tags = None 
     
     def find_close(self, x, y, range = 1):
@@ -428,8 +497,10 @@ class DragManager():
             return
         
         if not obj.real:
-            self.sess.close()
+            
             tf.reset_default_graph()
+
+            self.sess.close()
             self.sess = tf.Session()
             #as the graph is being cleared we can't keep anything from
             #previous realifying so reset. Reseting the obj will reset
@@ -439,6 +510,7 @@ class DragManager():
                 print("realifying failed")
                 return 
             init = tf.global_variables_initializer()
+            tf.get_default_graph().finalize()
             self.sess.run(init)
         for _ in range(obj.repeat):
             for l in self.layers:
