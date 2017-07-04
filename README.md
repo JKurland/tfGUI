@@ -48,10 +48,10 @@ graph
 'l' -> Linear  
 'c' -> Constant  
 'p' -> Print  
-'o' -> Plot
-'t' -> Trainer
-'e' -> End
-'r' -> Relu  
+'o' -> Plot   
+'t' -> Trainer   
+'e' -> End   
+'r' -> Relu    
 'm' -> MSE Loss  
 'f' -> File Reader  
 
