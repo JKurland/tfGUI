@@ -21,7 +21,7 @@ function does nothing but return inputs['main']
 run is called when the block is called, either by being double clicked on or
 when the block above it is called. Session is the current tensorflow session.
 
-##sockets
+## sockets
 
 each block can have many different named inputs called sockets. by default each
 block has one socket called 'main'. This means that the inputs passed to both
