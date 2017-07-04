@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import tkinter as tk
-
+from tests import *
 from simple_layers import Linear, Constant, Relu, DragManager
 
 root = tk.Tk()
@@ -18,26 +18,28 @@ canvas.bind_all("<ButtonRelease-3>", drag_manager.on_r_release)
 canvas.bind_all("<KeyPress>", drag_manager.on_key)
 canvas.bind("<Double-Button-1>", drag_manager.on_double)
 
-#c = Constant('input',canvas, np.random.rand(1,3))
-#c2 = Constant('input2',canvas, np.random.rand(1,4))
+simple_network_test(canvas)
 
-#lin = Linear('linear',canvas, 7)
-#lin2 = Linear('linear2',canvas, 7)
-
-#relu = Relu('relu', canvas)
-#relu2 = Relu('relu2', canvas)
-
-#relu.add_input(lin)
-#relu2.add_input(lin2)
-
-#lin.add_input(c)
-#lin.add_input(c)
-#lin.add_input(c2)
-
-#lin2.add_input(relu)
-#lin2.add_input(lin)
-
-#relu2.make_real()
+# c = Constant('input', canvas, np.random.rand(1,3))
+# c2 = Constant('input2', canvas, np.random.rand(1,4))
+#
+# lin = Linear('linear',canvas, 7)
+# lin2 = Linear('linear2',canvas, 7)
+#
+# relu = Relu('relu', canvas)
+# relu2 = Relu('relu2', canvas)
+#
+# relu.add_input(lin)
+# relu2.add_input(lin2)
+#
+# lin.add_input(c)
+# lin.add_input(c)
+# lin.add_input(c2)
+#
+# lin2.add_input(relu)
+# lin2.add_input(lin)
+#
+# relu2.make_real()
 
 canvas.pack(fill = tk.BOTH, expand = tk.YES)
 

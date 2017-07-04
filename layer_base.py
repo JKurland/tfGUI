@@ -55,7 +55,7 @@ class LayerBase():
 
     """
     The base class for layers. Each layer must know where to get its inputs
-    from and have an output it that other layer objects can access. The layer
+    from and have an output that other layer objects can access. The layer
     may then have a preprocessing step where the inputs it gets can be combined
     or reshaped as required. The layer then has a main processing step which is
     defined by the layer type. Layers can be wrapped.
@@ -103,7 +103,7 @@ class LayerBase():
             if len(input_require) != input_number:
                 raise ValueError("number of input require must match" +
                                     " required number of inputs")
-        empties = [ [] for _ in range(input_number)] 
+        empties = [[] for _ in range(input_number)]
         self._inputs = dict(zip(input_names, empties))
         self._making_real = False
         self._variables = {}
