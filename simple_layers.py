@@ -52,7 +52,7 @@ class Linear(LayerBase):
         self._tf_vars.append(w)
         self._tf_vars.append(b)
         with tf.variable_scope(self.name):
-            return tf.matmul(inputs, w) + b
+            return tf.matmul (inputs, w) + b
 
 
 class Relu(LayerBase):
@@ -252,6 +252,7 @@ class Sample(LayerBase):
         
         return output
 
+
 def add_layer(Class, man):
     name = Class.__name__
     i = 0
@@ -274,10 +275,7 @@ def add_layer(Class, man):
 
 # if you add a new layer class, add a shortcut to it here, in __init__
 class DragManager():
-    """
-    class for an object which managesthe dragging of objects
-    """
-
+    
     def __init__(self, canvas):
         self.widget = None 
         self.sess = tf.Session()
@@ -323,44 +321,59 @@ class DragManager():
             ID = self.canvas.gettags(self.widget)
             if 'arrow' in ID: #an arrow got selected
                 return
-
-            widgets = self.canvas.find_withtag(ID[0])
-            for w in widgets:
-                self.canvas.move(w, event.x - self.mouse_x,
-                                 event.y - self.mouse_y)
             
-            arrows_to = self.canvas.find_withtag('e' + ID[0])
-            for a in arrows_to:
-                X = self.canvas.coords(a)
-                x0 = X[0]
-                y0 = X[1]
-                
-                x1 = X[2]
-                y1 = X[3]
-                
-                x1 += event.x - self.mouse_x
-                y1 += event.y - self.mouse_y
-
-                self.canvas.coords(a, x0, y0, x1, y1)
-            
-            arrows_to = self.canvas.find_withtag('s' + ID[0])
-            for a in arrows_to:
-                X = self.canvas.coords(a)
-                x0 = X[0]
-                y0 = X[1]
-
-                x1 = X[2]
-                y1 = X[3]
-
-                x0 += event.x - self.mouse_x
-                y0 += event.y - self.mouse_y
-
-                self.canvas.coords(a, x0, y0, x1, y1)
-             
-            
+            self.move_by_id(ID[0], event.x - self.mouse_x,
+                            event.y-self.mouse_y)
+        
             self.mouse_x = event.x
             self.mouse_y = event.y
+
+
+    def move_by_id(self, ID, d_x, d_y):
+        widgets = self.canvas.find_withtag(ID)
+        for w in widgets:
+            self.canvas.move(w, d_x, d_y)        
+        arrows_to = self.canvas.find_withtag('e' + ID)
+        for a in arrows_to:
+            X = self.canvas.coords(a)
+            x0 = X[0]
+            y0 = X[1]
+            
+            x1 = X[2]
+            y1 = X[3]
+            
+            x1 += d_x 
+            y1 += d_y 
+
+            self.canvas.coords(a, x0, y0, x1, y1)
+        
+        arrows_to = self.canvas.find_withtag('s' + ID)
+        for a in arrows_to:
+            X = self.canvas.coords(a)
+            x0 = X[0]
+            y0 = X[1]
+
+            x1 = X[2]
+            y1 = X[3]
+
+            x0 += d_x 
+            y0 += d_y 
+
+            self.canvas.coords(a, x0, y0, x1, y1)
+
+    def move_by_obj(self, obj, d_x, d_y):
+        ID = self.obj2id[obj]
+        self.move_by_id(ID, d_x, d_y)
     
+    def place_by_obj(self, obj, x, y):
+        #place an object at an absolute location, anchored at the top left
+        X = obj.coords
+        
+        x_origin = X[0]
+        y_origin = X[1]
+
+        self.move_by_obj(obj, x - x_origin, y - y_origin)
+
     def on_release(self, event):
         
         widget = self.find_close(event.x, event.y)[0]
@@ -390,8 +403,6 @@ class DragManager():
         self.widget =  None
         self.mouse_x = None
         self.mouse_y = None
-
-
 
     def on_double(self, event):
         #self.widget is set by the on_click event which is called first
@@ -464,7 +475,4 @@ class DragManager():
         except:
             return
         add_layer(Class, self)
-      
-
-
-
+    
