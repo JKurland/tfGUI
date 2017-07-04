@@ -6,14 +6,17 @@ from matplotlib import pyplot as plt
 def use_variable(scope_name, var_name, shape, init = None):
     with tf.variable_scope(scope_name) as scope: 
         try:
-            if init:
-                v = tf.get_variable(var_name, shape, init = init)
+            if init is not None:
+                if isinstance(init, tf.Tensor):
+                    v = tf.get_variable(var_name, initializer = init)
+                else:
+                    v = tf.get_variable(var_name, shape, initializer = init)
             else:
                 v = tf.get_variable(var_name, shape)
-        except ValueError:
+        except ValueError as inst:
             scope.reuse_variables()
-            if init:
-                v = tf.get_variable(var_name, init = init)
+            if init is not None:
+                v = tf.get_variable(var_name, initializer = init)
             else:
                 v = tf.get_variable(var_name)
         
@@ -224,7 +227,7 @@ class End(LayerBase):
 class Sample(LayerBase):
     def __init__(self, name, canvas):
         LayerBase.__init__(self, name, canvas)
-        self._variables['N'] = 64
+        self._variables['N'] = '64'
 
     def proc(self, inputs):
         i = inputs['main']
@@ -235,12 +238,12 @@ class Sample(LayerBase):
 
         shuffle = tf.random_shuffle(i)
         t = use_variable(self.name, 'step', [], init = tf.constant(0))
-         
+
         if total_size<N:
             N = total_size
             inc_t = tf.assign(t, 0)
         else:
-            inc_t = tf.assign(t, tf.mod(t + N, total_size-N))
+            inc_t = tf.assign(t, tf.mod(t+N, total_size-N))
         
         with tf.control_dependencies([inc_t]):
             begin = [t] + (dims-1)*[0]
@@ -294,7 +297,8 @@ class DragManager():
                               'f':FileReader,
                               't':Trainer,
                               'o':Plot,
-                              'e':End}
+                              'e':End,
+                              's':Sample}
         self.tags = None 
     
     def find_close(self, x, y, range = 1):
