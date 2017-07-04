@@ -55,9 +55,9 @@ graph
 'm' -> MSE Loss  
 'f' -> File Reader  
 
-left click and drag to move a block
-right click and drag to connect two blocks
-double click to run a block
+left click and drag to move a block  
+right click and drag to connect two blocks  
+double click to run a block  
 
 
 
