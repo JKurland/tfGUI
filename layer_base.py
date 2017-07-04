@@ -215,6 +215,7 @@ class LayerBase():
             i = self._inputs[n]
             
             nme = self.name + ', ' + n 
+            
             if (not share) and len(i)>1:
                 raise Exception("More than one input to non-shared socket in "
                                 + nme)

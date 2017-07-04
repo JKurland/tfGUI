@@ -1,22 +1,28 @@
 from layer_base import *
 import numpy as np
+from matplotlib import pyplot as plt
 
 
-
-def use_variable(scope_name, var_name, shape):
-    with tf.variable_scope(scope_name) as scope:
+def use_variable(scope_name, var_name, shape, init = None):
+    with tf.variable_scope(scope_name) as scope: 
         try:
-            v = tf.get_variable(var_name, shape)
+            if init:
+                v = tf.get_variable(var_name, shape, init = init)
+            else:
+                v = tf.get_variable(var_name, shape)
         except ValueError:
             scope.reuse_variables()
-            v = tf.get_variable(var_name)
+            if init:
+                v = tf.get_variable(var_name, init = init)
+            else:
+                v = tf.get_variable(var_name)
         
         
         if not compare_shapes(v.get_shape().as_list(), shape):
-            print(shape)
-            print(v.get_shape().as_list())
             raise Exception('Shared variables have different shapes ' +
-                            scope_name + '/' + var_name)
+                            scope_name + '/' + var_name +
+                           '. Got shapes {}, {}'.format(shape,
+                                                        v.get_shape().as_list()))
 
         return v
         
@@ -68,19 +74,25 @@ class Constant(LayerBase):
     def __init__(self, name, canvas, value='np.random.rand(5,10)'):
         LayerBase.__init__(self, name, canvas, input_number = 0)
         self.value = value
+
+        self._variables['value'] = value
    
     def proc(self, inputs):
-        return tf.convert_to_tensor(eval(self.value), tf.float32)
+        val = self._variables['value']
+        return tf.convert_to_tensor(eval(val), tf.float32)
 
 class Print(LayerBase):
     """layer which prints its input when run"""
 
     def __init__(self, name, canvas):
         LayerBase.__init__(self, name, canvas)
+        self.t = 0
+        self._variables['Frequency'] = 1
 
     def run(self,session):
-        print(session.run(self.output))
-
+        if self.t%int(self._variables['Frequency']) == 0:
+            print(session.run(self.output))
+        self.t += 1
 
 class MSELoss(LayerBase):
 
@@ -132,7 +144,110 @@ class Trainer(LayerBase):
 
     def run(self, session):
         session.run(self._train_op)
+ 
 
+class Plot(LayerBase):
+
+    def __init__(self, name, canvas):
+        LayerBase.__init__(self, name, canvas,
+                           input_share = [False],
+                           input_shapes = [[]])
+        
+        self.log = []
+        self.x = []
+        self._variables['Frequency'] = 1
+        self._variables['Title'] = self.name
+        self._variables['y label'] = ''
+        self.t = 0
+        
+        #name is chosen initially so that the first Plot object is called Plot
+        #the second is Plot0, the third Plot1 etc... take advantage of that
+        #to number the figures, very hacky, should be changed
+        if name == 'Plot':
+            num = 1
+        else:
+            num = int(name[4:])+2
+
+        self.fig_num = num 
+
+
+    def run(self, session):
+        if self.t%int(self._variables['Frequency']) == 0:
+            plt.figure(self.fig_num)
+            plt.clf()
+
+            plt.title(self._variables['Title'])
+            plt.xlabel('Step')
+            plt.ylabel(self._variables['y label'])
+            self.x.append(self.t)
+            self.log.append(session.run(self.output))
+            plt.plot(self.x, self.log)
+            plt.draw()
+            plt.pause(0.01)
+        
+        self.t +=1
+
+    def reset_real(self):
+        LayerBase.reset_real(self)
+        plt.figure(self.fig_num)
+        plt.clf()
+        self.t = 0
+        self.log = []
+        self.x = []
+
+
+class End(LayerBase):
+     #class for running everything beneath it
+
+    def __init__(self, name, canvas):
+        LayerBase.__init__(self, name, canvas)
+        self._variables['iters'] = 1
+
+    @property
+    def repeat(self):
+        return int(self._variables['iters'])
+
+    @repeat.setter
+    def repeat(self, value):
+        self._variables['iters'] = value
+
+    def check_compatible(self, inputs):
+        return
+
+    def pre_proc(self, inputs):
+        return None
+
+    def proc(self, inputs):
+        return None
+
+
+class Sample(LayerBase):
+    def __init__(self, name, canvas):
+        LayerBase.__init__(self, name, canvas)
+        self._variables['N'] = 64
+
+    def proc(self, inputs):
+        i = inputs['main']
+        shape = i.get_shape().as_list()
+        dims = len(shape)
+        total_size = shape[0]
+        N = eval(self._variables['N'])
+
+        shuffle = tf.random_shuffle(i)
+        t = use_variable(self.name, 'step', [], init = tf.constant(0))
+         
+        if total_size<N:
+            N = total_size
+            inc_t = tf.assign(t, 0)
+        else:
+            inc_t = tf.assign(t, tf.mod(t + N, total_size-N))
+        
+        with tf.control_dependencies([inc_t]):
+            begin = [t] + (dims-1)*[0]
+            size = [N] + (dims-1)*[-1]
+            output = tf.slice(shuffle, begin, size)
+        
+        return output
 
 def add_layer(Class, man):
     name = Class.__name__
@@ -154,7 +269,7 @@ def add_layer(Class, man):
 
 
 
-
+# if you add a new layer class, add a shortcut to it here, in __init__
 class DragManager():
     """
     class for an object which managesthe dragging of objects
@@ -177,7 +292,9 @@ class DragManager():
                               'p':Print,
                               'm':MSELoss,
                               'f':FileReader,
-                              't':Trainer}
+                              't':Trainer,
+                              'o':Plot,
+                              'e':End}
         self.tags = None 
     
     def find_close(self, x, y, range = 1):
