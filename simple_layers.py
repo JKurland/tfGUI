@@ -252,9 +252,20 @@ class Sample(LayerBase):
         
         return output
 
+class ExtractParam(LayerBase):
+    
+    def __init__(self, name, canvas):
+        LayerBase.__init__(self, name, canvas, input_share = [False])
+        self._variables['Param Name'] = ''
+
+    def proc(self, inputs):
+        
+        i = self._inputs['main'] #the input object
+        
+        
 
 def add_layer(Class, man):
-    name = Class.__name__
+    name  = Class.__name__
     i = 0
     new_name = '%s%i'%(name, i)
     if name in list(man.names):
@@ -270,7 +281,8 @@ def add_layer(Class, man):
     man.obj2id[new_layer] = new_layer.id
     man.names.append(new_layer.name)
     man.layers.append(new_layer)
-
+    
+    return new_layer
 
 
 # if you add a new layer class, add a shortcut to it here, in __init__
