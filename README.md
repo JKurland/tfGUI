@@ -41,3 +41,30 @@ deals with all the GUI input at the moment
 contains the base class definition, all block classes inherit from this class.
 All the defaults are defined here as well as the machinery for building the
 graph
+
+
+## shortcuts
+
+'l' -> Linear  
+'c' -> Constant  
+'p' -> Print  
+'o' -> Plot
+'t' -> Trainer
+'e' -> End
+'r' -> Relu  
+'m' -> MSE Loss  
+'f' -> File Reader  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
