@@ -203,9 +203,11 @@ class LayerBase():
                 sockets[n] = socket
 
 
-        shape = r(self.x0,self.y0,self.x1,self.y1, tags = (self.id, 'body'))
+        shape = r(self.x0,self.y0,self.x1,self.y1, tags = (self.id, 'output',
+                                                           'main', 'body'))
 
-        text = t(self.x_mean, self.y_mean, text = self.name, tags=(self.id, 'name'))
+        text = t(self.x_mean, self.y_mean, text = self.name, tags=(self.id,
+                                                                   'output','main', 'name'))
             
         return[shape, text, sockets]
 
