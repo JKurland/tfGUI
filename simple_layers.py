@@ -1,32 +1,7 @@
 from layer_base import *
 import numpy as np
 from matplotlib import pyplot as plt
-
-
-def use_variable(var_name, shape, init = None):
-    try:
-        if init is not None:
-            if isinstance(init, tf.Tensor):
-                v = tf.get_variable(var_name, initializer = init)
-            else:
-                v = tf.get_variable(var_name, shape, initializer = init)
-        else:
-            v = tf.get_variable(var_name, shape)
-    except ValueError as inst:
-        scope.reuse_variables()
-        if init is not None:
-            v = tf.get_variable(var_name, initializer = init)
-        else:
-            v = tf.get_variable(var_name)
-    
-    
-    if not compare_shapes(v.get_shape().as_list(), shape):
-        raise Exception('Shared variables have different shapes ' +
-                        scope_name + '/' + var_name +
-                       '. Got shapes {}, {}'.format(shape,
-                                                    v.get_shape().as_list()))
-
-    return v
+from numpy import median
     
 
 class Linear(LayerBase):
@@ -34,8 +9,8 @@ class Linear(LayerBase):
     class for linear projections
     """
 
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas, input_shapes = [[None, -1]])
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man, input_shapes = [[None, -1]])
         #None forces all inputs to be the same size, -1 allows inputs to be
         #different
         self._variables['size'] = 20
@@ -45,11 +20,12 @@ class Linear(LayerBase):
         inputs = inputs['main']
         in_size = inputs.get_shape().as_list()[-1]
 
-        w = use_variable('weights', [in_size, self._size])
-        b = use_variable('biases', [self._size])
+        w = self.use_variable('weights', [in_size, self._size])
+        b = self.use_variable('biases', [self._size])
 
-        self._tf_vars.append(w)
-        self._tf_vars.append(b)
+        tf.add_to_collection('weights', w)
+        tf.add_to_collection('biases', w)
+
         return tf.matmul (inputs, w) + b
 
 class Relu(LayerBase):
@@ -57,8 +33,8 @@ class Relu(LayerBase):
     class for rectified linear units
     """
 
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas)
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man)
 
 
     def proc(self, inputs):
@@ -66,13 +42,12 @@ class Relu(LayerBase):
         with tf.variable_scope(self.name):
             return tf.nn.relu(inputs, 'relu')
 
-
 class Constant(LayerBase):
     """layer which outputs a constant numpy array"""
     
 
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas, input_number = 0)
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man, input_number = 0)
         self.value = 'np.random.rand(5,10)'
 
         self._variables['value'] = self.value
@@ -84,20 +59,28 @@ class Constant(LayerBase):
 class Print(LayerBase):
     """layer which prints its input when run"""
 
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas)
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man)
         self.t = 0
+        self.node = None 
         self._variables['Frequency'] = 1
 
-    def run(self,session):
+    def proc(self, inputs):
+        out = LayerBase.proc(self, inputs)
+        self._request_node(out)
+        self.node = out
+        return out
+
+    def run(self):
+
         if self.t%int(self._variables['Frequency']) == 0:
-            print(session.run(self.output))
+            print(self._get_node(self.node))
         self.t += 1
 
 class MSELoss(LayerBase):
 
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name,canvas, input_number = 2,
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name,canvas, man, input_number = 2,
                            input_names = ['estimates','targets'],
                            input_share = [True, True],
                            input_shapes = [None, None],
@@ -111,8 +94,8 @@ class MSELoss(LayerBase):
 
 class FileReader(LayerBase):
 
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas, input_number = 0)
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man, input_number = 0)
 
         self._variables['path'] = 'data'
 
@@ -123,34 +106,48 @@ class FileReader(LayerBase):
 
 class Trainer(LayerBase):
 
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas, input_names = ['Loss'])
-        self._variables['iters'] == 10
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man,
+                           input_names = ['Loss'],
+                           input_shapes = [[1]])
+        self._variables['iters'] = '10'
+        self._variables['alpha'] = '1e-4'
         self._train_op = None 
-    
+        self.t = 0
 
-    @property
-    def repeat(self):
-        return int(self._variables['iters'])
-    
-    @repeat.setter
-    def repeat(self, value):
-        self._variables['iters'] = value
+    def pre_proc(self, inputs):
+        i = inputs['Loss']
+        return tf.add_n(i)
 
     def proc(self, inputs):
         loss = inputs['Loss']
-        self._train_op = tf.train.AdamOptimizer(1e-4).minimize(loss,
+        t = self.t
+        al = eval(self._variables['alpha'])
+        self._train_op = tf.train.AdamOptimizer(al).minimize(loss,
                                                     aggregation_method = 2)
+        with tf.control_dependencies([self._train_op]):
+            out = tf.identity(loss)
+        self._request_node(out)
+        self.node = out
         return loss
 
-    def run(self, session):
-        session.run(self._train_op)
- 
+    def run(self): 
+        self._get_node(self.node)
+        if self.t < eval(self._variables['iters']):
+            self.cont = 1
+        else:
+            self.cont = 0
+            self.t = 0
+        self.t+=1
+
+    def reset(self):
+        LayerBase.reset(self)
+        self.t = 0
 
 class Plot(LayerBase):
 
     def __init__(self, name, canvas, man):
-        LayerBase.__init__(self, name, canvas,
+        LayerBase.__init__(self, name, canvas, man,
                            input_share = [False],
                            input_shapes = [[]])
         
@@ -166,8 +163,14 @@ class Plot(LayerBase):
         #to number the figures, very hacky, should be changed
         self.fig_num = man.figs
 
+    def proc(self, inputs):
+        o = LayerBase.proc(self, inputs)
+        self.node = inputs['main']
 
-    def run(self, session):
+        self._request_node(self.node)
+        return o
+
+    def run(self):
         if self.t%int(self._variables['Frequency']) == 0:
             plt.figure(self.fig_num)
             plt.clf()
@@ -176,36 +179,33 @@ class Plot(LayerBase):
             plt.xlabel('Step')
             plt.ylabel(self._variables['y label'])
             self.x.append(self.t)
-            self.log.append(session.run(self.output))
+            self.log.append(self._get_node(self.node))
             plt.plot(self.x, self.log)
+            
+            y_max = 3*median(self.log)
+            y_min = 0
+            axes = plt.gca()
+            axes.set_ylim([y_min, y_max])
             plt.draw()
             plt.pause(0.01)
         
         self.t +=1
 
-    def reset_real(self):
-        LayerBase.reset_real(self)
+    def reset(self):
+        LayerBase.reset(self)
         plt.figure(self.fig_num)
         plt.clf()
         self.t = 0
         self.log = []
         self.x = []
 
-
 class End(LayerBase):
      #class for running everything beneath it
 
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas)
-        self._variables['iters'] = 1
-
-    @property
-    def repeat(self):
-        return int(self._variables['iters'])
-
-    @repeat.setter
-    def repeat(self, value):
-        self._variables['iters'] = value
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man)
+        self._variables['iters'] = '1' 
+        self.t = 0
 
     def check_inputs(self, inputs):
         return
@@ -214,48 +214,65 @@ class End(LayerBase):
         return None
 
     def proc(self, inputs):
-        return None
+        return None 
 
+    def run(self):
+        if self.t < eval(self._variables['iters']):
+            self.cont = 1
+        else:
+            self.cont = 0
+            self.t = 0
+        self.t+=1
+
+    def reset(self):
+        LayerBase.reset(self)
+        self.t = 0
 
 class Sample(LayerBase):
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas)
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man)
         self._variables['N'] = '64'
 
     def proc(self, inputs):
         i = inputs['main']
-        shape = i.get_shape().as_list()
-        dims = len(shape)
+        shape = tf.shape(i)
+        dims = shape.get_shape().as_list()[0]
         total_size = shape[0]
         N = eval(self._variables['N'])
 
-        shuffle = tf.random_shuffle(i)
-        t = use_variable('step', [], init = tf.constant(0))
+        #shuffle = tf.random_shuffle(i)
+        t = self.use_variable('step', [], init = tf.constant(0))
+        epoch = self.use_variable('epoch', [],
+                                  init = tf.constant(0.0, dtype = tf.float32))
 
-        if total_size<N:
-            N = total_size
-            inc_t = tf.assign(t, 0)
-        else:
-            inc_t = tf.assign(t, tf.mod(t+N, total_size-N))
+        n = tf.ceil(total_size/N)
+        inc_epoch = tf.assign_add(epoch,tf.cast(1/n, tf.float32))
+    
+
+        new_t = tf.mod(t+N, total_size-N)
+        inc_t = tf.cond(total_size<N, lambda: tf.assign(t,0),
+                        lambda: tf.assign(t, new_t))
         
-        with tf.control_dependencies([inc_t]):
+        N = tf.minimum(N, total_size)
+
+        with tf.control_dependencies([inc_t, inc_epoch]):
             begin = [t] + (dims-1)*[0]
             size = [N] + (dims-1)*[-1]
-            output = tf.slice(shuffle, begin, size)
-        
+            output = tf.slice(i, begin, size)
+                 
         return output
 
 class ExtractParam(LayerBase):
     
-    def __init__(self, name, canvas):
-        LayerBase.__init__(self, name, canvas, input_share = [False])
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man, input_share = [False])
         self._variables['Param Name'] = ''
         
         self.show_variable_window()
         self.hide_variable_window()
 
     def proc(self, inputs):
-        i = self._inputs['main'][0] #the input object
+        i = self._inputs['main'][0][0] #the input object
         if self._variables['Param Name'] == '':
             return tf.constant(0)
         else:
@@ -267,16 +284,15 @@ class ExtractParam(LayerBase):
                     return tf.identity(output) 
             return tf.constant(0)
 
-
 class ShowImage(LayerBase):
     def __init__(self, name, canvas, man):
-        LayerBase.__init__(self, name, canvas, input_share = [False])
+        LayerBase.__init__(self, name, canvas, man, input_share = [False])
         man.figs += 1
         self.fig_num = man.figs
         self._variables['Title'] = self.name
         self._variables['vmin'] = ''
         self._variables['vmax'] = ''
-        self._variables['Frequency'] = 1
+        self._variables['Frequency'] = '1'
         self.t = 0
 
     def check_input(self, inputs):
@@ -299,9 +315,15 @@ class ShowImage(LayerBase):
             raise Exception('Image must have 2 or 3 dimensions in ' +
                             self.name)
 
-    def run(self, session):
+    def proc(self, inputs):
+        o = LayerBase.proc(self, inputs)
+        self.node = o
+        self._request_node(o)
+        return o
+
+    def run(self):
         if self.t%eval(self._variables['Frequency']) == 0:
-            img = session.run(self.output)
+            img = self._get_node(self.node)
             plt.figure(self.fig_num)
             plt.clf
             if self._variables['vmin'] == '':
@@ -325,6 +347,159 @@ class ShowImage(LayerBase):
         plt.figure(self.fig_num)
         plt.clf()
         self.t = 0
+
+class Split(LayerBase):
+
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man,
+                          output_number = 2,
+                          output_names = ['a','b'])
+
+        self._variables['dim'] = '0'
+        self._variables['size of a'] = '0.5'
+
+    def proc(self, inputs):
+        pos = eval(self._variables['size of a'])
+        dim = eval(self._variables['dim'])
+
+        i = inputs['main']
+        if not type(pos) is int: 
+            pos = tf.floor(tf.cast(tf.shape(i)[dim],tf.float32)*pos)
+            pos = tf.cast(pos, tf.int32)
+
+        r = tf.shape(i)[dim]-pos
+        pos = tf.convert_to_tensor(pos)
+        sizes = tf.stack([pos, r])
+
+        tf.assert_non_negative(r, data = [r, pos], message = "size of a must be "+
+                           "less than or equal to the total size of the input")
+
+        tf.assert_non_negative(pos, data = [r, pos], message = "size of a must be "+
+                           "equal to or greater than 0")
+
+        a, b =tf.split(i,sizes, axis = dim)
+        output = {}
+        output['a'] = a
+        output['b'] = b
+        return output
+
+class Join(LayerBase):
+
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man,
+                           input_number = 2,
+                           input_names = ['a','b'],
+                           input_share = True,
+                           input_shapes = [None, None],
+                           input_require = [True, True])
+        self._variables['dim'] = 0
+
+    def proc(self, inputs):
+        a = inputs['a']
+        b = inputs['b']
+        dim = eval(self._variables['dim'])
+        
+        SofA = self.use_variable('SizeOfA', [], init = tf.constant(0))
+        
+        s = tf.shape(a)[dim]
+
+        with tf.control_dependencies([tf.assign(SofA, s)]):
+            return tf.concat([a,b], dim)
+
+class Reshape(LayerBase):
+
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man)
+        self._variables['shape'] = '[-1]'
+
+    def proc(self, inputs):
+        i = inputs['main']
+        shape = eval(self._variables['shape'])
+        return tf.reshape(i, shape)
+
+class Conv(LayerBase):
+
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man,
+                          input_shapes = [[None, None, None, -1]])
+        self._variables['window'] = '5'
+        self._variables['stride'] = '1'
+        self._variables['channels'] = '10'
+        self._variables['Padding'] = 'SAME'
+        self._variable_types['Padding'] = VariableType('drop', ['SAME',
+                                                                'VALID'])
+
+    def proc(self, inputs):
+        i = inputs['main']
+
+        win = eval(self._variables['window'])
+        stride = eval(self._variables['stride'])
+        size = eval(self._variables['channels'])
+        padding = self._variables['Padding']
+        
+        in_depth = i.get_shape().as_list()[-1]
+        
+        filters = self.use_variable('filters', [win, win, in_depth, size])
+        biases = self.use_variable('biases', [1,1,1,size])
+
+        tf.add_to_collection('weights', filters)
+        tf.add_to_collection('biases', biases)
+
+        result = tf.nn.conv2d(i,filters,[1, stride, stride, 1], padding)+biases 
+        return result
+
+class MaxPool(LayerBase):
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man)
+        self._variables['window'] = '2'
+        self._variables['stride'] = '1'
+        self._variables['Padding'] = 'SAME'
+        self._variable_types['Padding'] = VariableType('drop',
+                                                       ['SAME', 'VALID'])
+    
+
+    def proc(self, inputs):
+        i = inputs['main']
+        w = eval(self._variables['window'])
+        s = eval(self._variables['stride'])
+        p = self._variables['Padding']
+
+        return tf.nn.max_pool(i, [1,w,w,1], [1,s,s,1], p)
+
+class Softmax(LayerBase):
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man,
+                           input_number = 2,
+                           input_names = ['labels','logits'],
+                           input_shapes = [[None],[None, -1]],
+                           input_share = [True, True],
+                           input_require = [True, True])
+
+    def proc(self, inputs):
+        labels = tf.cast(inputs['labels'], tf.int32)
+        logits = inputs['logits']
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels = labels,
+                                                       logits = logits)
+        mean_loss = tf.reduce_mean(loss)
+        return mean_loss
+
+class Shape(LayerBase):
+
+    def proc(self, inputs):
+        return tf.shape(inputs['main'])
+
+
+class L2_Loss(LayerBase):
+    def __init__(self, name, canvas, man):
+        LayerBase.__init__(self, name, canvas, man, input_number = 0)
+        self._variables['lambda'] = '4e-5'
+
+    def proc(self, inputs):
+        weights = tf.get_collection('weights')
+        l2s = [tf.nn.l2_loss(w) for w in weights]
+        
+        lam = eval(self._variables['lambda'])
+        return lam*tf.add_n(l2s)
 
 def add_layer(Class, man):
     name  = Class.__name__
@@ -560,3 +735,17 @@ class DragManager():
             return
         add_layer(Class, self)
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
