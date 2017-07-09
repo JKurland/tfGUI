@@ -51,7 +51,6 @@ def check_compatible(shapes):
 
     return True 
 
-
 class VariableType():
 
     def __init__(self, type_string, options):
@@ -160,6 +159,10 @@ class LayerBase():
         
         self.showing_v_win = False
         self.selected = False
+
+        self.priority = 0
+        self.getting_priority = False
+        self.got_priority = False
 
         self.input_height = 20
         self.shape, self.center, self.text, self.in_sockets, self.out_sockets = self._make_shapes()
@@ -323,7 +326,6 @@ class LayerBase():
                     i_shapes = [t.output[s].get_shape().as_list() for t,s in i]
 
             dims = [len(s) for s in i_shapes]
-
             if not all([d == dims[0] for d in dims]):
                 raise Exception("inconsistent dimensions in " + nme)
 
@@ -366,6 +368,37 @@ class LayerBase():
         else:
             return self.output
 
+    def get_priority(self):
+
+        if self.getting_priority:
+            raise Exception( 'Recursion Error, check for loops')
+        
+        if not self.got_priority:
+            self.getting_priority = True
+            
+            dependency_priorities = [self.priority]
+            for n in self.input_names:
+                for i,_ in self._inputs[n]:
+                    dependency_priorities.append(i.get_priority())
+
+            mx = max(dependency_priorities)
+            mn = min(dependency_priorities)
+            
+            if abs(mn) > abs(mx):
+                self.priority = mn
+            elif abs(mx) > abs(mn):
+                self.priority = mx
+            elif mx == mn:
+                pass
+            else:
+                print('Warning: priority clash in ' + self.name)
+                self.priority = mx
+
+            self.got_priority = True
+            self.getting_priority = False
+
+        return self.priority
+
     def make_real(self):
         """
         if this function is called while _making_real is true then it must have, through
@@ -374,11 +407,22 @@ class LayerBase():
         
         """
         if (not self.real) and self._making_real:
-            raise Exception ('Recusion Error, check for loops')
+            raise Exception ('Recursion Error, check for loops')
         
         if not self.real:
             self._making_real = True
             
+
+            for n in self.input_names:
+                dp = []
+                for i,_ in self._inputs[n]:
+                    dp.append(i.get_priority())
+
+                srted = sorted(zip(dp, self._inputs[n]),reverse = True)
+                self._inputs[n]=[i for _,i in srted]    
+                
+            
+
             for n in self.input_names:
                 for i,_ in self._inputs[n]:
                     if i.make_real() == 0:
@@ -546,7 +590,10 @@ class LayerBase():
         
         self.set_real(False)
         self._making_real = False 
-        
+       
+        self.got_priority = False
+        self.getting_priority = False
+
         self._tf_vars = []
         self._partial_run_nodes = set()
         self.dependencies = set([self])

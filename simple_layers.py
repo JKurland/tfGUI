@@ -109,7 +109,7 @@ class Trainer(LayerBase):
     def __init__(self, name, canvas, man):
         LayerBase.__init__(self, name, canvas, man,
                            input_names = ['Loss'],
-                           input_shapes = [[1]])
+                           input_shapes = [None])
         self._variables['iters'] = '10'
         self._variables['alpha'] = '1e-4'
         self._train_op = None 
@@ -117,7 +117,9 @@ class Trainer(LayerBase):
 
     def pre_proc(self, inputs):
         i = inputs['Loss']
-        return tf.add_n(i)
+        output = {'Loss': tf.add_n(i)}
+
+        return output
 
     def proc(self, inputs):
         loss = inputs['Loss']
@@ -389,7 +391,7 @@ class Join(LayerBase):
         LayerBase.__init__(self, name, canvas, man,
                            input_number = 2,
                            input_names = ['a','b'],
-                           input_share = True,
+                           input_share = [True, True],
                            input_shapes = [None, None],
                            input_require = [True, True])
         self._variables['dim'] = 0
@@ -493,6 +495,8 @@ class L2_Loss(LayerBase):
     def __init__(self, name, canvas, man):
         LayerBase.__init__(self, name, canvas, man, input_number = 0)
         self._variables['lambda'] = '4e-5'
+        
+        self.priority = -1
 
     def proc(self, inputs):
         weights = tf.get_collection('weights')

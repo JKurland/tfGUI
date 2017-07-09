@@ -11,6 +11,7 @@ mnist_test.csv
 partial_run_test.py
 *-ubyte
 temp
+*.csv
 
 # C extensions
 *.so
