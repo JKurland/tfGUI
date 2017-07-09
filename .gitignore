@@ -4,7 +4,13 @@ __pycache__/
 *$py.class
 *.swp
 
+#custom
 .idea/*
+manager_copy.py
+mnist_test.csv
+partial_run_test.py
+*-ubyte
+temp
 
 # C extensions
 *.so
